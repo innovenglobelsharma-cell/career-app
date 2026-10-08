@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1789712821336,
+      "tag": "0000_many_thena",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791268359593,
+      "tag": "0001_add_user_phone_number",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791269755377,
+      "tag": "0002_phone_otp_challenges",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791273240664,
+      "tag": "0003_ancient_squadron_supreme",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791273400398,
+      "tag": "0004_nostalgic_queen_noir",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791279479209,
+      "tag": "0005_brown_mister_fear",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791288420000,
+      "tag": "0006_add_job_category",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: job-marketplace-api
+    runtime: node
+    rootDir: .
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @workspace/db run push && pnpm --filter @workspace/api-server build
+    startCommand: pnpm --filter @workspace/api-server start
+    healthCheckPath: /api/healthz
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: MESSAGE_HASH_SECRET
+        generateValue: true
+      - key: APP_URL
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_REQUIRE_TLS
+        value: "true"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
+      - key: SMTP_FROM_NAME
+        value: Careerly Interviews
+      # Render free services block SMTP ports. When this key is present, the
+      # app sends over Resend HTTPS and reuses SMTP_FROM_EMAIL/SMTP_FROM_NAME.
+      - key: RESEND_API_KEY
+        sync: false

@@ -1,0 +1,270 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-border: hsl(var(--card-border));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --font-sans: var(--app-font-sans);
+  --font-mono: var(--app-font-mono);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --background: 42 38% 95%;
+  --foreground: 225 28% 18%;
+  --border: 37 25% 86%;
+  --input: 37 25% 86%;
+  --ring: 173 49% 36%;
+  --card: 43 50% 98%;
+  --card-foreground: 225 28% 18%;
+  --card-border: 37 25% 88%;
+  --popover: 43 50% 98%;
+  --popover-foreground: 225 28% 18%;
+  --primary: 173 49% 32%;
+  --primary-foreground: 42 38% 97%;
+  --secondary: 39 94% 67%;
+  --secondary-foreground: 225 28% 18%;
+  --muted: 40 27% 91%;
+  --muted-foreground: 222 12% 45%;
+  --accent: 13 77% 61%;
+  --accent-foreground: 42 38% 97%;
+  --destructive: 4 67% 48%;
+  --destructive-foreground: 42 38% 97%;
+  --sidebar: 225 28% 18%;
+  --sidebar-foreground: 42 38% 96%;
+  --sidebar-border: 225 22% 25%;
+  --sidebar-primary: 39 94% 67%;
+  --sidebar-primary-foreground: 225 28% 18%;
+  --sidebar-accent: 225 22% 25%;
+  --sidebar-accent-foreground: 42 38% 96%;
+  --app-font-sans: 'DM Sans', sans-serif;
+  --app-font-display: 'Manrope', sans-serif;
+  --app-font-mono: 'Space Mono', monospace;
+  --radius: 0.85rem;
+  --shadow-sm: 0 2px 10px rgba(35, 41, 66, .05);
+  --shadow-md: 0 12px 30px rgba(35, 41, 66, .08);
+}
+
+.dark {
+  --background: 225 28% 12%;
+  --foreground: 42 38% 95%;
+  --border: 225 22% 25%;
+  --input: 225 22% 25%;
+  --card: 225 25% 16%;
+  --card-foreground: 42 38% 95%;
+  --card-border: 225 22% 25%;
+  --popover: 225 25% 16%;
+  --popover-foreground: 42 38% 95%;
+  --primary: 173 49% 45%;
+  --primary-foreground: 225 28% 12%;
+  --secondary: 39 94% 67%;
+  --secondary-foreground: 225 28% 12%;
+  --muted: 225 22% 21%;
+  --muted-foreground: 40 18% 70%;
+  --accent: 13 77% 61%;
+  --accent-foreground: 225 28% 12%;
+  --destructive: 4 67% 55%;
+  --destructive-foreground: 225 28% 12%;
+  --sidebar: 225 30% 9%;
+  --sidebar-foreground: 42 38% 95%;
+  --sidebar-border: 225 22% 20%;
+  --sidebar-primary: 39 94% 67%;
+  --sidebar-primary-foreground: 225 28% 12%;
+  --sidebar-accent: 225 22% 20%;
+  --sidebar-accent-foreground: 42 38% 95%;
+}
+
+@layer base {
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground font-sans antialiased; }
+  button, input { font: inherit; }
+}
+
+@layer utilities {
+  .font-display { font-family: var(--app-font-display); }
+  .font-mono-custom { font-family: var(--app-font-mono); }
+}
+
+html { scroll-behavior: smooth; }
+::selection { background: hsl(var(--secondary)); color: hsl(var(--foreground)); }
+
+.app-grain::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: .035;
+  z-index: 50;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.95' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.48'/%3E%3C/svg%3E");
+}
+.lift { transition: transform .2s ease, box-shadow .2s ease, background-color .2s ease; }
+.lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.fade-up { animation: fadeUp .45s ease both; }
+.fade-up-2 { animation: fadeUp .45s .08s ease both; }
+.fade-up-3 { animation: fadeUp .45s .16s ease both; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.recruiter-page-enter { animation: recruiterPageEnter .32s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes recruiterPageEnter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.job-dialog-enter { animation: jobDialogEnter .2s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes jobDialogEnter { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.app-grain button:not(:disabled) { transition: transform .16s ease, box-shadow .16s ease, background-color .16s ease, color .16s ease; }
+.app-grain button:not(:disabled):active { transform: scale(.98); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+/* Accessible, consistently sized notification switches. */
+button[data-testid^="switch-"] { width: 3.5rem !important; height: 2rem !important; padding: .25rem !important; }
+button[data-testid^="switch-"] > span { top: .25rem !important; width: 1.5rem !important; height: 1.5rem !important; }
+
+/* Professional portal refresh: crisp navy, cobalt, and cloud neutrals. */
+:root { --background: 220 33% 97%; --foreground: 222 47% 15%; --primary: 221 83% 53%; --primary-foreground: 0 0% 100%; --ring: 221 83% 53%; --card: 0 0% 100%; --border: 220 20% 90%; }
+
+details > summary::-webkit-details-marker { display: none; }
+details[open] > div { animation: accountMenuIn .16s ease-out both; }
+details[open] summary { background: #edf3ff; color: #1747a6; }
+@keyframes accountMenuIn { from { opacity: 0; transform: translateY(-5px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+/* The login layout is intentionally scoped by its two-column hero structure. */
+#root > div:has(> div > section) { background: radial-gradient(circle at 76% 14%, #dbeafe 0, transparent 25rem), #f7f9fd !important; }
+#root > div:has(> div > section) > div > section { background: linear-gradient(145deg, #071a3d 0%, #0e3475 55%, #2563eb 130%) !important; }
+#root > div:has(> div > section) > div > section::before { content: ''; position: absolute; width: 22rem; height: 22rem; right: -8rem; top: 17%; border-radius: 999px; border: 1px solid rgba(147,197,253,.42); box-shadow: 0 0 0 3rem rgba(96,165,250,.08), 0 0 0 6rem rgba(96,165,250,.05); animation: portalOrbit 10s linear infinite; }
+#root > div:has(> div > section) > div > section::after { content: ''; position: absolute; width: .55rem; height: .55rem; top: 32%; right: 22%; border-radius: 999px; background: #93c5fd; box-shadow: -9rem 6rem 0 #60a5fa, 5rem 11rem 0 #bfdbfe; animation: portalFloat 4s ease-in-out infinite; }
+#root > div:has(> div > section) > div > main { background: transparent !important; }
+#root > div:has(> div > section) > div > main > div > div { border-color: #dbe4f2 !important; background: rgba(255,255,255,.92) !important; box-shadow: 0 24px 60px rgba(15, 42, 92, .15) !important; animation: loginRise .55s cubic-bezier(.2,.8,.2,1) both; }
+#root > div:has(> div > section) button[type="submit"] { background: linear-gradient(135deg, #2563eb, #1d4ed8) !important; box-shadow: 0 12px 22px rgba(37,99,235,.25) !important; }
+#root > div:has(> div > section) input:focus { border-color: #2563eb !important; box-shadow: 0 0 0 4px rgba(37,99,235,.12) !important; }
+@keyframes portalOrbit { to { transform: rotate(360deg); } }
+@keyframes portalFloat { 50% { transform: translateY(-18px); opacity: .55; } }
+@keyframes loginRise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+
+button[data-testid^="switch-"] { background: #cbd5e1 !important; border: 1px solid #cbd5e1; }
+button[data-testid^="switch-"]:has(span.translate-x-6) { background: #2563eb !important; border-color: #2563eb; box-shadow: 0 4px 10px rgba(37,99,235,.25); }
+button[data-testid^="switch-"] > span { transition: transform .2s cubic-bezier(.2,.8,.2,1), box-shadow .2s ease !important; }
+
+/* Keep signed-in workspaces aligned with the login page's navy and cobalt palette. */
+.app-grain { background: #f7f9fd !important; }
+.app-grain [class*="bg-[#0b1f44]"] { background: linear-gradient(145deg, #071a3d 0%, #0e3475 70%, #123d82 100%) !important; }
+.app-grain [class*="bg-[#f4f7fc]"],
+.app-grain [class*="bg-[#f8faff]"] { background-color: #f7f9fd !important; }
+.app-grain main section { border-color: #dbe4f2; }
+.app-grain [class*="bg-[#fbf7ef]"] { background-color: #fff !important; }
+.app-grain [class*="bg-[#f7f2e8]"] { background-color: #f4f7fc !important; }
+.app-grain [class*="bg-[#147d6d]"] { background-color: #2563eb !important; }
+.app-grain [class*="text-[#147d6d]"] { color: #2563eb !important; }
+.app-grain [class*="text-[#252b43]"] { color: #172554 !important; }
+.app-grain [class*="border-[#e8dece]"] { border-color: #dbe4f2 !important; }
+.app-grain [class*="bg-[#f2c96d]"] { background-color: #2563eb !important; color: white !important; }
+.app-grain [class*="bg-[#e1f1e9]"] { background-color: #eff6ff !important; }
+.app-grain [class*="bg-[#f8f2e7]"],
+.app-grain [class*="bg-[#f7f0e5]"],
+.app-grain [class*="bg-[#f1eadf]"],
+.app-grain [class*="bg-[#f4ecdd]"],
+.app-grain [class*="bg-[#faf5eb]"] { background-color: #f7f9fd !important; }
+.app-grain [class*="bg-[#fff0d0]"],
+.app-grain [class*="bg-[#dfeceb]"],
+.app-grain [class*="bg-[#fae6dc]"] { background-color: #eff6ff !important; }
+.app-grain [class*="text-[#b77624]"],
+.app-grain [class*="text-[#9b681d]"],
+.app-grain [class*="text-[#594718]"] { color: #2563eb !important; }
+.app-grain [class*="text-[#4a3e20]"],
+.app-grain [class*="text-[#77683f]"] { color: #475569 !important; }
+.app-grain [class*="border-[#e5dccd]"],
+.app-grain [class*="border-[#eee5d8]"],
+.app-grain [class*="border-[#ddcdb6]"] { border-color: #dbe4f2 !important; }
+.app-grain .lift:hover { border-color: #93c5fd; box-shadow: 0 14px 34px rgba(15,42,92,.10); }
+
+/* Keep native select controls and their option menus in the portal palette. */
+.app-grain select:not([multiple]) {
+  appearance: none;
+  border: 1px solid #dbe4f2;
+  border-radius: .75rem;
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23647795' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .75rem center;
+  background-size: 1rem;
+  padding-right: 2.5rem;
+  color: #334155;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+.app-grain select:not([multiple]):focus-visible {
+  border-color: #2563eb;
+  outline: 0;
+  box-shadow: 0 0 0 4px rgba(219,234,254,.9);
+}
+.app-grain select:not([multiple]):disabled {
+  cursor: not-allowed;
+  background-color: #f8fafc;
+  color: #64748b;
+  opacity: 1;
+}
+.app-grain select option {
+  background-color: #fff;
+  color: #172554;
+}
+
+/* Profile completion uses the same navy and cobalt accents as sign-in. */
+.profile-strength-card {
+  background: linear-gradient(145deg, #071a3d 0%, #0e3475 55%, #2563eb 130%) !important;
+  color: #f8fbff;
+  box-shadow: 0 14px 30px rgba(15, 42, 92, .16) !important;
+}
+.profile-strength-orbit { border-color: rgba(147, 197, 253, .2); }
+.profile-strength-eyebrow { color: #bfdbfe; }
+.profile-strength-copy { color: #d1dfef; }
+.profile-strength-link { color: #93c5fd; }
+.profile-strength-link:hover { color: #f8fbff; }
+.profile-strength-ring circle:first-child { stroke: rgba(236, 247, 245, .25); }
+.profile-strength-ring circle:nth-child(2) { stroke: #60a5fa; }
+.profile-strength-ring span { color: #f8fbff; }
+
+/* Direct-message panel: collapse the conversation list above the chat before
+   narrow viewports force both columns into unreadable slivers. */
+@media (max-width: 1023px) {
+  .app-grain div:has(> aside[class~="w-[280px]"]) {
+    flex-direction: column !important;
+    min-height: 0 !important;
+  }
+  .app-grain div:has(> aside[class~="w-[280px]"]) > aside {
+    width: 100% !important;
+    max-height: 15rem;
+    overflow-y: auto;
+    border-right: 0 !important;
+    border-bottom: 1px solid #dbe4f2 !important;
+  }
+  .app-grain div:has(> aside[class~="w-[280px]"]) > section {
+    min-height: 28rem;
+  }
+  .app-grain div:has(> aside[class~="w-[280px]"]) [class*="max-w-[78%]"] {
+    max-width: 92% !important;
+  }
+  .app-grain div:has(> aside[class~="w-[280px]"]) p {
+    overflow-wrap: anywhere;
+  }
+}

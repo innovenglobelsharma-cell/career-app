@@ -1,0 +1,28 @@
+{
+  "name": "@workspace/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts"
+  },
+  "scripts": {
+    "migrate": "node --env-file-if-exists=../../.env ./node_modules/drizzle-kit/bin.cjs migrate --config ./drizzle.config.ts",
+    "push": "node --env-file-if-exists=../../.env ./node_modules/drizzle-kit/bin.cjs push --config ./drizzle.config.ts",
+    "push-force": "node --env-file-if-exists=../../.env ./node_modules/drizzle-kit/bin.cjs push --force --config ./drizzle.config.ts",
+    "seed": "node --env-file-if-exists=../../.env --import tsx ./src/seed.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "catalog:",
+    "drizzle-zod": "^0.8.3",
+    "pg": "^8.23.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "catalog:"
+  }
+}

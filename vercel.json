@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "framework": "vite",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm --filter @workspace/job-marketplace-panel build",
+  "outputDirectory": "artifacts/job-marketplace-panel/dist/public",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
