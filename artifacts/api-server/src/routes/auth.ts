@@ -1,14 +1,14 @@
 import express, { Router, type IRouter, type Response } from "express";
 import { createHash, randomInt, timingSafeEqual } from "node:crypto";
-import { and, eq, gt, isNull, ne } from "drizzle-orm";
-import { companies, companyVerificationDocuments, db, passwordResetOtps, phoneOtpChallenges, users, type SeekerProfileData } from "@workspace/db";
+import { and, desc, eq, gt, isNull, ne } from "drizzle-orm";
+import { companies, companyVerificationDocuments, db, passwordResetOtps, phoneOtpChallenges, users, type ResumeTemplateContent, type SeekerProfileData } from "@workspace/db";
 import { createSession, destroySession, hashPassword, publicUser, requireAuth, verifyPassword } from "../lib/auth";
 import { sendPhoneOtp, SmsProviderError } from "../lib/fast2sms";
 import { getSender, sendEmail } from "../lib/mailer";
 
 const router: IRouter = Router();
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const verificationDocumentTypes = ["gst", "pan", "msme", "other"] as const;
+const verificationDocumentTypes = ["gst", "pan", "msme", "offer_letter", "other"] as const;
 const verificationMimeTypes = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
 const requireAdmin = (req: import("express").Request, res: Response) => {
   if (req.authUser?.role === "admin") return true;
@@ -117,7 +117,7 @@ router.post("/auth/register", async (req, res, next) => {
     const user = await db.transaction(async (transaction) => {
       const [created] = await transaction.insert(users).values({ name, email, passwordHash, role, phoneNumber: mobile }).returning();
       if (!created) throw new Error("User creation failed");
-      if (role === "recruiter") await transaction.insert(companies).values({ name: companyName, industry: "Not specified", city: "Not specified", recruiterId: created.id });
+      if (role === "recruiter") await transaction.insert(companies).values({ name: companyName, recruiterContactName: name, industry: "Not specified", city: "Not specified", recruiterId: created.id });
       return created;
     });
     await createSession(user.id, res);
@@ -155,16 +155,32 @@ router.post("/auth/register/otp/resend", async (req, res, next) => {
   }
 });
 
-router.post("/auth/login/otp/send", async (req, res, next) => {
+router.post("/auth/login", async (req, res, next) => {
   try {
     const email = String(req.body?.email || "").trim().toLowerCase();
     const password = String(req.body?.password || "");
-    const mobile = normalizeMobile(req.body?.phoneNumber);
-    if (!emailPattern.test(email) || !password || !mobile) { res.status(400).json({ error: "Enter your email, password, and a valid 10-digit mobile number." }); return; }
+    if (!emailPattern.test(email) || !password) {
+      res.status(400).json({ error: "Enter a valid email address and password." });
+      return;
+    }
     const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-    if (!user || !(await verifyPassword(password, user.passwordHash))) { res.status(401).json({ error: "Email or password is incorrect" }); return; }
-    if (user.phoneNumber && user.phoneNumber !== mobile) { res.status(400).json({ error: "Enter the mobile number linked to your account." }); return; }
-    await issuePhoneOtp(mobile, "login");
+    if (!user || !(await verifyPassword(password, user.passwordHash))) {
+      res.status(401).json({ error: "Email or password is incorrect." });
+      return;
+    }
+    await createSession(user.id, res);
+    res.json({ user: publicUser(user) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/auth/login/otp/send", async (req, res, next) => {
+  try {
+    const mobile = normalizeMobile(req.body?.phoneNumber);
+    if (!mobile) { res.status(400).json({ error: "Enter a valid 10-digit mobile number." }); return; }
+    const [user] = await db.select({ id: users.id }).from(users).where(eq(users.phoneNumber, mobile)).limit(1);
+    if (user) await issuePhoneOtp(mobile, "login");
     res.json({ phoneNumber: maskMobile(mobile) });
   } catch (error) {
     if (sendProviderError(error, res)) return;
@@ -174,13 +190,13 @@ router.post("/auth/login/otp/send", async (req, res, next) => {
 
 router.post("/auth/login/otp/resend", async (req, res, next) => {
   try {
-    const email = String(req.body?.email || "").trim().toLowerCase();
-    const password = String(req.body?.password || "");
     const mobile = normalizeMobile(req.body?.phoneNumber);
-    if (!emailPattern.test(email) || !password || !mobile) { res.status(400).json({ error: "Enter your email, password, and a valid 10-digit mobile number." }); return; }
-    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-    if (!user || !(await verifyPassword(password, user.passwordHash))) { res.status(401).json({ error: "Email or password is incorrect" }); return; }
-    if (user.phoneNumber && user.phoneNumber !== mobile) { res.status(400).json({ error: "Enter the mobile number linked to your account." }); return; }
+    if (!mobile) { res.status(400).json({ error: "Enter a valid 10-digit mobile number." }); return; }
+    const [user] = await db.select({ id: users.id }).from(users).where(eq(users.phoneNumber, mobile)).limit(1);
+    if (!user) {
+      res.json({ phoneNumber: maskMobile(mobile) });
+      return;
+    }
     await issuePhoneOtp(mobile, "login", true);
     res.json({ phoneNumber: maskMobile(mobile) });
   } catch (error) {
@@ -191,28 +207,12 @@ router.post("/auth/login/otp/resend", async (req, res, next) => {
 
 router.post("/auth/login/otp/verify", async (req, res, next) => {
   try {
-    const email = String(req.body?.email || "").trim().toLowerCase();
-    const password = String(req.body?.password || "");
     const mobile = normalizeMobile(req.body?.phoneNumber);
     const otp = String(req.body?.otp || "").trim();
-    if (!emailPattern.test(email) || !password || !mobile || !/^\d{6}$/.test(otp)) { res.status(400).json({ error: "Enter valid login details and the 6-digit phone verification code." }); return; }
-    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-    if (!user || !(await verifyPassword(password, user.passwordHash))) { res.status(401).json({ error: "Email or password is incorrect" }); return; }
-    if (user.phoneNumber && user.phoneNumber !== mobile) { res.status(400).json({ error: "Enter the mobile number linked to your account." }); return; }
+    if (!mobile || !/^\d{6}$/.test(otp)) { res.status(400).json({ error: "Enter a valid 10-digit mobile number and 6-digit verification code." }); return; }
     if (!(await verifyPhoneChallenge(mobile, "login", otp))) { res.status(400).json({ error: "The phone verification code is invalid or expired." }); return; }
-    if (!user.phoneNumber) {
-      try {
-        const [updated] = await db.update(users).set({ phoneNumber: mobile }).where(and(eq(users.id, user.id), isNull(users.phoneNumber))).returning({ phoneNumber: users.phoneNumber });
-        if (!updated) {
-          const [current] = await db.select({ phoneNumber: users.phoneNumber }).from(users).where(eq(users.id, user.id)).limit(1);
-          if (current?.phoneNumber !== mobile) { res.status(400).json({ error: "Enter the mobile number linked to your account." }); return; }
-        }
-      } catch (error) {
-        if ((error as { code?: string }).code === "23505") { res.status(409).json({ error: "That mobile number is already linked to another account." }); return; }
-        throw error;
-      }
-      user.phoneNumber = mobile;
-    }
+    const [user] = await db.select().from(users).where(eq(users.phoneNumber, mobile)).limit(1);
+    if (!user) { res.status(400).json({ error: "The phone verification code is invalid or expired." }); return; }
     await createSession(user.id, res);
     res.json({ user: publicUser(user) });
   } catch (error) {
@@ -270,6 +270,20 @@ router.post("/auth/password-reset/verify", async (req, res, next) => {
 
 router.get("/auth/me", requireAuth, (req, res) => res.json({ user: publicUser(req.authUser!) }));
 
+router.get("/admin/users", requireAuth, async (req, res, next) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+    const rows = await db.select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+      createdAt: users.createdAt,
+    }).from(users).orderBy(desc(users.createdAt));
+    res.json({ users: rows });
+  } catch (error) { next(error); }
+});
+
 router.patch("/users/me", requireAuth, async (req, res, next) => {
   try {
     const name = String(req.body?.name || req.authUser!.name).trim().slice(0, 120);
@@ -298,9 +312,9 @@ router.patch("/users/me/profile", requireAuth, async (req, res, next) => {
     if (name.length < 2 || name.length > 120 || !emailPattern.test(email) || email.length > 255) {
       res.status(400).json({ error: "Enter a valid name and email address" }); return;
     }
-    const textFields = ["headline", "location", "addressLine", "city", "state", "pincode", "resumeName"] as const;
+    const textFields = ["headline", "location", "addressLine", "city", "state", "pincode", "resumeName", "summary"] as const;
     const maxLengths: Record<(typeof textFields)[number], number> = {
-      headline: 160, location: 140, addressLine: 180, city: 100, state: 100, pincode: 6, resumeName: 255,
+      headline: 160, location: 140, addressLine: 180, city: 100, state: 100, pincode: 6, resumeName: 255, summary: 2000,
     };
     const profile: SeekerProfileData = {};
     for (const field of textFields) {
@@ -310,7 +324,58 @@ router.patch("/users/me/profile", requireAuth, async (req, res, next) => {
       }
       if (typeof value === "string") profile[field] = value.trim();
     }
+    if (input.gender !== undefined) {
+      if (!["Female", "Male", "Non-binary", "Prefer not to say"].includes(input.gender)) {
+        res.status(400).json({ error: "Choose a valid gender option" }); return;
+      }
+      profile.gender = input.gender;
+    }
+    if (input.age !== undefined) {
+      if (!Number.isInteger(input.age) || input.age < 18 || input.age > 100) {
+        res.status(400).json({ error: "Enter an age between 18 and 100" }); return;
+      }
+      profile.age = input.age;
+    }
+    if (input.englishLevel !== undefined) {
+      if (!["Basic", "Conversational", "Intermediate", "Fluent", "Professional", "Native"].includes(input.englishLevel)) {
+        res.status(400).json({ error: "Choose a valid English proficiency level" }); return;
+      }
+      profile.englishLevel = input.englishLevel;
+    }
+    if (input.totalExperience !== undefined) {
+      if (typeof input.totalExperience !== "string" || input.totalExperience.trim().length > 80) {
+        res.status(400).json({ error: "Enter a valid total experience range" }); return;
+      }
+      profile.totalExperience = input.totalExperience.trim();
+    }
     if (profile.pincode && !/^[1-9]\d{5}$/.test(profile.pincode)) { res.status(400).json({ error: "Enter a valid 6-digit PIN code" }); return; }
+    if (input.careerProfile !== undefined) {
+      const source = input.careerProfile;
+      if (!source || typeof source !== "object" || Array.isArray(source)) {
+        res.status(400).json({ error: 'Profile field "careerProfile" is invalid' }); return;
+      }
+      const careerProfile: NonNullable<SeekerProfileData["careerProfile"]> = {};
+      const careerTextFields = [
+        "industry", "department", "roleCategory", "jobRole", "jobType",
+        "employmentType", "expectedSalary", "shift", "noticePeriod",
+      ] as const;
+      for (const field of careerTextFields) {
+        const value = source[field];
+        if (value !== undefined && (typeof value !== "string" || value.trim().length > 160)) {
+          res.status(400).json({ error: `Career preference "${field}" is invalid` }); return;
+        }
+        if (typeof value === "string" && value.trim()) careerProfile[field] = value.trim();
+      }
+      for (const field of ["preferredRoles", "workLocations"] as const) {
+        const values = source[field];
+        if (values !== undefined && (!Array.isArray(values) || values.length > 20
+          || values.some((value: unknown) => typeof value !== "string" || !value.trim() || value.trim().length > 120))) {
+          res.status(400).json({ error: `Career preference "${field}" is invalid` }); return;
+        }
+        if (Array.isArray(values)) careerProfile[field] = [...new Set(values.map((value: string) => value.trim()))];
+      }
+      profile.careerProfile = careerProfile;
+    }
     if (input.phone !== undefined && String(input.phone).replace(/\D/g, "").slice(-10) !== req.authUser!.phoneNumber) {
       res.status(400).json({ error: "Use the phone number verified on your account" }); return;
     }
@@ -346,12 +411,150 @@ router.patch("/users/me/profile", requireAuth, async (req, res, next) => {
           if (typeof value !== "string" || value.trim().length > 120) return null;
           result[key] = value.trim();
         }
+        if (field === "experiences" && record.description !== undefined) {
+          if (typeof record.description !== "string" || record.description.trim().length > 1200) return null;
+          result.description = record.description.trim();
+        }
         return result;
       });
       if (normalized.some((row) => row === null)) { res.status(400).json({ error: `Profile field "${field}" contains invalid entries` }); return; }
       if (field === "experiences") profile.experiences = normalized as SeekerProfileData["experiences"];
       if (field === "educations") profile.educations = normalized as SeekerProfileData["educations"];
       if (field === "certificates") profile.certificates = normalized as SeekerProfileData["certificates"];
+    }
+    for (const [field, keys] of [
+      ["projects", ["name", "role", "period", "description", "url"]],
+      ["portfolioLinks", ["title", "type", "url", "description"]],
+    ] as const) {
+      const values = input[field];
+      if (values !== undefined && (!Array.isArray(values) || values.length > 20)) {
+        res.status(400).json({ error: `Profile field "${field}" is invalid` }); return;
+      }
+      if (!Array.isArray(values)) continue;
+      const normalized = values.map((row: unknown) => {
+        if (!row || typeof row !== "object" || Array.isArray(row)) return null;
+        const record = row as Record<string, unknown>;
+        const result: Record<string, string> = {};
+        for (const key of keys) {
+          const value = record[key];
+          const optional = (field === "projects" && key === "url") || (field === "portfolioLinks" && key === "description");
+          if (value === undefined && optional) continue;
+          const maxLength = key === "description" ? 1200 : key === "url" ? 500 : 160;
+          if (typeof value !== "string" || value.trim().length > maxLength) return null;
+          result[key] = value.trim();
+        }
+        return result;
+      });
+      if (normalized.some((row) => row === null)) {
+        res.status(400).json({ error: `Profile field "${field}" contains invalid entries` }); return;
+      }
+      if (field === "projects") profile.projects = normalized as SeekerProfileData["projects"];
+      if (field === "portfolioLinks") profile.portfolioLinks = normalized as SeekerProfileData["portfolioLinks"];
+    }
+    if (input.languages !== undefined && (!Array.isArray(input.languages) || input.languages.length > 20)) {
+      res.status(400).json({ error: 'Profile field "languages" is invalid' }); return;
+    }
+    if (Array.isArray(input.languages)) {
+      const languages = (input.languages as unknown[]).map((row: unknown) => {
+        if (!row || typeof row !== "object" || Array.isArray(row)) return null;
+        const language = row as Record<string, unknown>;
+        if (typeof language.language !== "string" || language.language.trim().length > 80
+          || typeof language.proficiency !== "string" || language.proficiency.trim().length > 80
+          || typeof language.read !== "boolean" || typeof language.write !== "boolean" || typeof language.speak !== "boolean") return null;
+        return {
+          language: language.language.trim(),
+          proficiency: language.proficiency.trim(),
+          read: language.read,
+          write: language.write,
+          speak: language.speak,
+        };
+      });
+      if (languages.some((language) => language === null)) {
+        res.status(400).json({ error: 'Profile field "languages" contains invalid entries' }); return;
+      }
+      profile.languages = languages as SeekerProfileData["languages"];
+    }
+    if (input.selectedResumeId !== undefined) {
+      if (!["template-modern", "template-classic", "template-minimal", "uploaded"].includes(input.selectedResumeId)) {
+        res.status(400).json({ error: "Choose a valid application resume" }); return;
+      }
+      profile.selectedResumeId = input.selectedResumeId;
+    }
+    if (input.resumeDocument !== undefined) {
+      const document = input.resumeDocument;
+      const mimeTypes = [
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "text/plain",
+        "text/markdown",
+      ];
+      if (!document || typeof document !== "object" || Array.isArray(document)
+        || typeof document.name !== "string" || document.name.trim().length < 1 || document.name.length > 255
+        || !mimeTypes.includes(document.mimeType)
+        || typeof document.dataUrl !== "string"
+        || !/^data:(?:application\/pdf|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document|text\/plain|text\/markdown);base64,[A-Za-z0-9+/]+={0,2}$/.test(document.dataUrl)
+        || document.dataUrl.length > 1_400_000) {
+        res.status(400).json({ error: "Upload a valid PDF, DOCX, or text resume no larger than 1 MB" }); return;
+      }
+      profile.resumeDocument = { name: document.name.trim(), mimeType: document.mimeType, dataUrl: document.dataUrl };
+    }
+    if (input.resumeTemplateContent !== undefined) {
+      const templateContent = input.resumeTemplateContent;
+      const templateIds = ["template-modern", "template-classic", "template-minimal"];
+      if (!templateContent || typeof templateContent !== "object" || Array.isArray(templateContent)
+        || Object.keys(templateContent).some((key) => !templateIds.includes(key))) {
+        res.status(400).json({ error: "Resume template content is invalid" }); return;
+      }
+      const validated: NonNullable<SeekerProfileData["resumeTemplateContent"]> = {};
+      for (const templateId of templateIds) {
+        const candidate = templateContent[templateId];
+        if (candidate === undefined) continue;
+        if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+          res.status(400).json({ error: "Resume template content is invalid" }); return;
+        }
+        const content = candidate as Record<string, unknown>;
+        const stringFields = ["name", "email", "phone", "headline", "location"] as const;
+        if (stringFields.some((field) => typeof content[field] !== "string" || (content[field] as string).length > 255)) {
+          res.status(400).json({ error: "Resume template contact and headline fields are invalid" }); return;
+        }
+        const readRows = (field: "experiences" | "educations" | "certificates", keys: string[]) => {
+          const rows = content[field];
+          if (!Array.isArray(rows) || rows.length > 20) return null;
+          const output: Array<Record<string, string>> = [];
+          for (const row of rows) {
+            if (!row || typeof row !== "object" || Array.isArray(row)) return null;
+            const result: Record<string, string> = {};
+            for (const key of keys) {
+              const value = (row as Record<string, unknown>)[key];
+              if (typeof value !== "string" || value.length > 255) return null;
+              result[key] = value;
+            }
+            output.push(result);
+          }
+          return output;
+        };
+        const strengths = content.strengths;
+        const experiences = readRows("experiences", ["role", "company", "period"]);
+        const educations = readRows("educations", ["degree", "school", "period"]);
+        const certificates = readRows("certificates", ["name", "issuer", "year"]);
+        if (!Array.isArray(strengths) || strengths.length > 20
+          || strengths.some((item) => typeof item !== "string" || item.length > 80)
+          || !experiences || !educations || !certificates) {
+          res.status(400).json({ error: "Resume template sections are invalid" }); return;
+        }
+        validated[templateId as keyof typeof validated] = {
+          name: content.name as string,
+          email: content.email as string,
+          phone: content.phone as string,
+          headline: content.headline as string,
+          location: content.location as string,
+          strengths: strengths as string[],
+          experiences: experiences as ResumeTemplateContent["experiences"],
+          educations: educations as ResumeTemplateContent["educations"],
+          certificates: certificates as ResumeTemplateContent["certificates"],
+        };
+      }
+      profile.resumeTemplateContent = validated;
     }
     const [updated] = await db.update(users)
       .set({ name, email, profileData: profile, city: profile.city || null })
@@ -371,11 +574,38 @@ router.get("/companies/me", requireAuth, async (req, res, next) => {
     if (!company) {
       [company] = await db.insert(companies).values({
         name: req.authUser!.name,
+        recruiterContactName: req.authUser!.name,
         industry: "Not specified",
         city: "Not specified",
         recruiterId: req.authUser!.id,
       }).returning();
     }
+    res.json({ company });
+  } catch (error) { next(error); }
+});
+
+router.get("/companies/:companyId/profile", async (req, res, next) => {
+  try {
+    const companyId = String(req.params.companyId);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(companyId)) {
+      res.status(404).json({ error: "Company profile not found" }); return;
+    }
+    const [company] = await db.select({
+      id: companies.id,
+      name: companies.name,
+      industry: companies.industry,
+      city: companies.city,
+      address: companies.address,
+      website: companies.website,
+      description: companies.description,
+      size: companies.size,
+      founded: companies.founded,
+      logoUrl: companies.logoUrl,
+      coverUrl: companies.coverUrl,
+    }).from(companies)
+      .where(and(eq(companies.id, companyId), eq(companies.verificationStatus, "verified")))
+      .limit(1);
+    if (!company) { res.status(404).json({ error: "Company profile not found" }); return; }
     res.json({ company });
   } catch (error) { next(error); }
 });
@@ -392,8 +622,10 @@ router.patch("/companies/me", requireAuth, async (req, res, next) => {
     const city = String(input.city || "").trim();
     const size = String(input.size || "").trim();
     const founded = String(input.founded || "").trim();
-    const contactEmail = String(input.contactEmail || "").trim().toLowerCase();
+    const contactEmail = String(input.contactEmail || req.authUser!.email).trim().toLowerCase();
     const phone = String(input.phone || "").trim();
+    const address = String(input.address || "").trim();
+    const recruiterContactName = String(input.recruiterName ?? input.recruiterContactName ?? req.authUser!.name).trim();
     const gstNumber = String(input.gstNumber || "").trim().toUpperCase();
     const panNumber = String(input.panNumber || "").trim().toUpperCase();
     const msmeNumber = String(input.msmeNumber || "").trim().toUpperCase();
@@ -407,15 +639,20 @@ router.patch("/companies/me", requireAuth, async (req, res, next) => {
     if (!["http:", "https:"].includes(parsedWebsite.protocol) || !parsedWebsite.hostname.includes(".") || website.length > 255) {
       res.status(400).json({ error: "Enter a valid company website URL" }); return;
     }
-    if (city.length > 100 || size.length > 40 || (founded && (!/^\d{4}$/.test(founded) || Number(founded) < 1800 || Number(founded) > new Date().getFullYear()))) {
+    if (city.length > 100 || size.length > 40 || address.length > 400 || recruiterContactName.length < 2 || recruiterContactName.length > 120 || (founded && (!/^\d{4}$/.test(founded) || Number(founded) < 1800 || Number(founded) > new Date().getFullYear()))) {
       res.status(400).json({ error: "Company location, size, or founded year is invalid" }); return;
     }
-    if (contactEmail && !emailPattern.test(contactEmail)) { res.status(400).json({ error: "Enter a valid company contact email" }); return; }
+    if (!emailPattern.test(contactEmail) || contactEmail.length > 255) { res.status(400).json({ error: "Enter a valid company contact email" }); return; }
     if (phone && !/^[+\d][\d\s().-]{7,29}$/.test(phone)) { res.status(400).json({ error: "Enter a valid company phone number" }); return; }
     if (gstNumber && !/^[0-9A-Z]{15}$/.test(gstNumber)) { res.status(400).json({ error: "Enter a valid 15-character GSTIN" }); return; }
     if (panNumber && !/^[A-Z]{5}\d{4}[A-Z]$/.test(panNumber)) { res.status(400).json({ error: "Enter a valid 10-character PAN number" }); return; }
     if (msmeNumber && !/^UDYAM-[A-Z]{2}-\d{2}-\d{7}$/.test(msmeNumber)) { res.status(400).json({ error: "Enter a valid Udyam registration number" }); return; }
-    for (const imageUrl of [logoUrl, coverUrl]) {
+    if (logoUrl.startsWith("data:")) {
+      if (!/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(logoUrl) || logoUrl.length > 1_400_000) {
+        res.status(400).json({ error: "Upload a PNG, JPEG, or WebP company logo no larger than 1 MB" }); return;
+      }
+    }
+    for (const imageUrl of [logoUrl.startsWith("data:") ? "" : logoUrl, coverUrl]) {
       if (!imageUrl) continue;
       try {
         const parsed = new URL(imageUrl);
@@ -429,8 +666,9 @@ router.patch("/companies/me", requireAuth, async (req, res, next) => {
     const profileChanged = Boolean(existing && (
       existing.name !== name || existing.industry !== industry || existing.website !== website ||
       existing.description !== description || existing.city !== (city || "Not specified") ||
+      existing.address !== (address || null) || existing.recruiterContactName !== recruiterContactName ||
       existing.size !== (size || null) || existing.founded !== (founded || null) ||
-      existing.contactEmail !== (contactEmail || null) || existing.phone !== (phone || null) ||
+      existing.contactEmail !== contactEmail || existing.phone !== (phone || null) ||
       existing.gstNumber !== (gstNumber || null) || existing.panNumber !== (panNumber || null) ||
       existing.msmeNumber !== (msmeNumber || null) || existing.logoUrl !== (logoUrl || null) ||
       existing.coverUrl !== (coverUrl || null)
@@ -439,30 +677,40 @@ router.patch("/companies/me", requireAuth, async (req, res, next) => {
       existing && profileChanged &&
       ["verified", "pending", "rejected"].includes(existing.verificationStatus),
     );
-    const [updated] = existing
-      ? await db.update(companies).set({
-          name, industry, website, description, city: city || "Not specified",
-          size: size || null, founded: founded || null, contactEmail: contactEmail || null,
-          phone: phone || null, gstNumber: gstNumber || null, panNumber: panNumber || null,
-          msmeNumber: msmeNumber || null, logoUrl: logoUrl || null, coverUrl: coverUrl || null,
-          verificationStatus: verificationReset
-            ? "incomplete"
-            : existing.verificationStatus,
-        }).where(eq(companies.id, existing.id)).returning()
-      : await db.insert(companies).values({
-          name, industry, website, description, city: city || "Not specified",
-          size: size || null, founded: founded || null, contactEmail: contactEmail || null,
-          phone: phone || null, gstNumber: gstNumber || null, panNumber: panNumber || null,
-          msmeNumber: msmeNumber || null, logoUrl: logoUrl || null, coverUrl: coverUrl || null,
-          recruiterId: req.authUser!.id,
-        }).returning();
-    if (verificationReset && existing) {
-      await db.update(companyVerificationDocuments).set({
-        status: "pending", reviewerId: null, reviewerNote: null, reviewedAt: null,
-      }).where(eq(companyVerificationDocuments.companyId, existing.id));
-    }
-    res.json({ company: updated, verificationReset });
-  } catch (error) { next(error); }
+    const { company, user } = await db.transaction(async (transaction) => {
+      const [updatedUser] = await transaction.update(users)
+        .set({ email: contactEmail })
+        .where(eq(users.id, req.authUser!.id))
+        .returning();
+      const [updatedCompany] = existing
+        ? await transaction.update(companies).set({
+            name, recruiterContactName, industry, website, description, city: city || "Not specified",
+            address: address || null,
+            size: size || null, founded: founded || null, contactEmail,
+            phone: phone || null, gstNumber: gstNumber || null, panNumber: panNumber || null,
+            msmeNumber: msmeNumber || null, logoUrl: logoUrl || null, coverUrl: coverUrl || null,
+            verificationStatus: verificationReset ? "incomplete" : existing.verificationStatus,
+          }).where(eq(companies.id, existing.id)).returning()
+        : await transaction.insert(companies).values({
+            name, recruiterContactName, industry, website, description, city: city || "Not specified",
+            address: address || null,
+            size: size || null, founded: founded || null, contactEmail,
+            phone: phone || null, gstNumber: gstNumber || null, panNumber: panNumber || null,
+            msmeNumber: msmeNumber || null, logoUrl: logoUrl || null, coverUrl: coverUrl || null,
+            recruiterId: req.authUser!.id,
+          }).returning();
+      if (verificationReset && existing) {
+        await transaction.update(companyVerificationDocuments).set({
+          status: "pending", reviewerId: null, reviewerNote: null, reviewedAt: null,
+        }).where(eq(companyVerificationDocuments.companyId, existing.id));
+      }
+      return { company: updatedCompany, user: updatedUser };
+    });
+    res.json({ company, user: publicUser(user!), verificationReset });
+  } catch (error) {
+    if ((error as { code?: string }).code === "23505") { res.status(409).json({ error: "An account already uses that email address" }); return; }
+    next(error);
+  }
 });
 
 router.get("/companies/me/verification-documents", requireAuth, async (req, res, next) => {
@@ -495,7 +743,7 @@ router.put("/companies/me/verification-documents/:documentType", requireAuth, ex
     if (req.authUser!.role !== "recruiter") { res.status(403).json({ error: "Recruiter access required" }); return; }
     const documentType = String(req.params.documentType);
     if (!verificationDocumentTypes.includes(documentType as typeof verificationDocumentTypes[number])) {
-      res.status(400).json({ error: "Choose GST, PAN, MSME, or other document type" }); return;
+      res.status(400).json({ error: "Choose GST, PAN, MSME, offer letter, or other document type" }); return;
     }
     const mimeType = String(req.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
     if (!verificationMimeTypes.has(mimeType)) { res.status(415).json({ error: "Upload a PDF, JPEG, PNG, or WebP document" }); return; }
@@ -562,7 +810,7 @@ router.post("/companies/me/verification/submit", requireAuth, async (req, res, n
     if (req.authUser!.role !== "recruiter") { res.status(403).json({ error: "Recruiter access required" }); return; }
     const documentType = String(req.body?.documentType || "");
     if (!verificationDocumentTypes.includes(documentType as typeof verificationDocumentTypes[number])) {
-      res.status(400).json({ error: "Select one valid business verification document type" }); return;
+      res.status(400).json({ error: "Select GST, PAN, MSME, offer letter, or another valid business document type" }); return;
     }
     const [company] = await db.select().from(companies).where(eq(companies.recruiterId, req.authUser!.id)).limit(1);
     if (!company) { res.status(404).json({ error: "Complete your company profile before submitting verification" }); return; }
@@ -605,7 +853,7 @@ router.get("/admin/company-verifications", requireAuth, async (req, res, next) =
     if (!requireAdmin(req, res)) return;
     const rows = await db.select({
       company: companies,
-      recruiterName: users.name,
+      recruiterName: companies.recruiterContactName,
       recruiterEmail: users.email,
     }).from(companies).innerJoin(users, eq(companies.recruiterId, users.id));
     const items = await Promise.all(rows.map(async ({ company, recruiterName, recruiterEmail }) => ({

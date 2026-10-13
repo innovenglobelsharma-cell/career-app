@@ -1,18 +1,19 @@
-import { APP_MODULES } from "@/constants/navigation";
+import React from "react";
+import { APP_COLORS, AppIconName } from "@/constants/theme";
 import { PlaceholderScreen } from "@/components/placeholder-screen";
 
-const MODULES_BY_ROUTE: Record<string, (typeof APP_MODULES)[number]> = Object.fromEntries(
-  APP_MODULES.map((module) => [module.route, module]),
-);
+const SUPPORT_DASH_ICON: AppIconName = {
+  ios: "square.grid.2x2",
+  android: "dashboard",
+  web: "dashboard",
+};
 
-export default function SupportScreen() {
-  const module = MODULES_BY_ROUTE["/(app)/support"];
-
+export default function SupportDashboardScreen() {
   return (
     <PlaceholderScreen
-      title={module?.label ?? "Support"}
-      subtitle={module?.description}
-      icon={module?.icon ?? { ios: "headset", android: "support_agent", web: "support_agent" }}
+      title="Support Dashboard"
+      subtitle="Support operations overview, ticket queue, and team metrics. Support workspace coming soon."
+      icon={SUPPORT_DASH_ICON}
     />
   );
 }

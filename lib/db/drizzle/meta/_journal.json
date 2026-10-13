@@ -50,6 +50,90 @@
       "when": 1791288420000,
       "tag": "0006_add_job_category",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791529497747,
+      "tag": "0007_subscription_plan_prices",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791529771127,
+      "tag": "0008_subscription_plan_entitlements",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791530598824,
+      "tag": "0009_repair_missing_subscription_application_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791542742394,
+      "tag": "0010_add_company_full_address",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791618504313,
+      "tag": "0011_job_views_and_company_logo_data",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791619950508,
+      "tag": "0012_mysterious_shard",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791626913047,
+      "tag": "0013_add_application_resume_snapshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791800000000,
+      "tag": "0014_preserve_message_identity_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1791800001000,
+      "tag": "0015_server_encrypted_message_bodies",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791800002000,
+      "tag": "0016_job_posting_wizard",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791800003000,
+      "tag": "0017_recruiter_contact_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791800004000,
+      "tag": "0018_job_posting_feedback",
+      "breakpoints": true
     }
   ]
 }

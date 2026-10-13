@@ -40,7 +40,7 @@ router.post("/email/interview-invitation", requireAuth, requireVerifiedRecruiter
   let meetingUrl: URL;
   try { meetingUrl = new URL(meetingLink); } catch { res.status(400).json({ error: "A valid meeting link is required" }); return; }
 
-  const validationFailed = req.authUser!.role !== "recruiter" || !candidateName || !emailPattern.test(candidateEmail) || !recruiterName || !emailPattern.test(recruiterEmail) || recruiterEmail !== req.authUser!.email || !companyName || !interviewType || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time) || !Number.isFinite(duration) || duration < 15 || duration > 480 || meetingUrl.protocol !== "https:";
+  const validationFailed = req.authUser!.role !== "recruiter" || !candidateName || !emailPattern.test(candidateEmail) || !recruiterName || !emailPattern.test(recruiterEmail) || recruiterEmail !== req.authUser!.email.trim().toLowerCase() || !companyName || !interviewType || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time) || !Number.isFinite(duration) || duration < 15 || duration > 480 || meetingUrl.protocol !== "https:";
   if (validationFailed) { res.status(400).json({ error: "Complete all interview fields with valid values" }); return; }
 
   const scheduledAt = new Date(`${date}T12:00:00Z`);

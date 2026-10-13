@@ -7,7 +7,11 @@ import { APP_COLORS, AppIconName, MaxContentWidth } from "@/constants/theme";
 import { ROLE_LABEL } from "@/constants/roles";
 import { PlaceholderScreen } from "@/components/placeholder-screen";
 
-const PROFILE_ICON: AppIconName = { ios: "person.crop.circle", android: "account_circle", web: "account_circle" };
+const PROFILE_ICON: AppIconName = {
+  ios: "person.crop.circle",
+  android: "account_circle",
+  web: "account_circle",
+};
 
 function ProfileRow({ label, value }: { label: string; value: string }) {
   return (
@@ -32,7 +36,11 @@ export default function ProfileScreen() {
       <View style={styles.card}>
         <View style={styles.avatar}>
           <SymbolView
-            name={{ ios: PROFILE_ICON.ios, android: PROFILE_ICON.android, web: PROFILE_ICON.web }}
+            name={{
+              ios: PROFILE_ICON.ios,
+              android: PROFILE_ICON.android,
+              web: PROFILE_ICON.web,
+            }}
             size={36}
             tintColor={APP_COLORS.primary}
           />
@@ -47,7 +55,11 @@ export default function ProfileScreen() {
         <ProfileRow label="Email" value={currentUser?.email ?? ""} />
         <ProfileRow
           label="Mobile"
-          value={currentUser?.phoneNumber ? `+91 ${currentUser.phoneNumber}` : "Not linked"}
+          value={
+            currentUser?.phoneNumber
+              ? `+91 ${currentUser.phoneNumber}`
+              : "Not linked"
+          }
         />
         <ProfileRow label="City" value={currentUser?.city ?? "Not set"} />
         <ProfileRow

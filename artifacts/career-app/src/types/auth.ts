@@ -1,4 +1,4 @@
-export type UserRole = "job_seeker" | "recruiter" | "admin";
+export type UserRole = "job_seeker" | "recruiter" | "admin" | "support";
 
 export type AuthUser = {
   id: string;
@@ -10,21 +10,9 @@ export type AuthUser = {
   createdAt: string;
 };
 
-export type SendLoginOtpInput = {
+export type LoginInput = {
   email: string;
   password: string;
-  phoneNumber: string;
-};
-
-export type VerifyLoginOtpInput = {
-  email: string;
-  password: string;
-  phoneNumber: string;
-  otp: string;
-};
-
-export type SendLoginOtpResponse = {
-  phoneNumber: string;
 };
 
 export type LoginResponse = {

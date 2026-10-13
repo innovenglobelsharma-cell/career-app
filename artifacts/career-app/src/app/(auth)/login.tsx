@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -17,147 +17,101 @@ import { z } from "zod";
 import { ApiError } from "@/api/errors";
 import { useAuth } from "@/auth/auth-provider";
 import { hasApiBaseUrl } from "@/config/env";
-import { APP_COLORS } from "@/constants/theme";
+import { APP_COLORS, AppIconName } from "@/constants/theme";
 import { ROLE_HOME_ROUTE } from "@/constants/roles";
+
+// -----------------------------------------------------------------------------
+// Validation
+// -----------------------------------------------------------------------------
 
 const credentialsSchema = z.object({
   email: z.string().email("Enter a valid email address."),
   password: z.string().min(1, "Password is required."),
-  phoneNumber: z
-    .string()
-    .min(10, "Enter the 10-digit mobile number linked to your account."),
 });
 
-const otpSchema = z.object({
-  otp: z.string().length(6, "Enter the 6-digit verification code."),
-});
+// -----------------------------------------------------------------------------
+// Reusable UI
+// -----------------------------------------------------------------------------
 
-/** Normalises Indian mobile input: keeps 10 digits, strips a leading +91 / 91. */
-function normalizePhoneNumber(raw: string) {
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length === 12 && digits.startsWith("91")) {
-    return digits.slice(2);
-  }
-  return digits;
+function FieldIcon({ icon, color }: { icon: AppIconName; color: string }) {
+  return (
+    <View
+      style={[
+        styles.fieldIcon,
+        {
+          backgroundColor: `${color}16`,
+        },
+      ]}
+    >
+      <SymbolView
+        name={{
+          ios: icon.ios,
+          android: icon.android,
+          web: icon.web,
+        }}
+        size={17}
+        tintColor={color}
+      />
+    </View>
+  );
 }
 
-type Step = "credentials" | "otp";
+// -----------------------------------------------------------------------------
+// Screen
+// -----------------------------------------------------------------------------
 
 export default function LoginScreen() {
-  const { sendLoginOtp, resendLoginOtp, verifyLoginOtp } = useAuth();
+  const { login } = useAuth();
 
-  const [step, setStep] = useState<Step>("credentials");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [otp, setOtp] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isResending, setIsResending] = useState(false);
-  const [maskedPhone, setMaskedPhone] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [resendCooldown, setResendCooldown] = useState(0);
 
-  const cooldownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (cooldownTimer.current) {
-        clearInterval(cooldownTimer.current);
-      }
-    };
-  }, []);
+  // ---------------------------------------------------------------------------
+  // Derived state
+  // ---------------------------------------------------------------------------
 
   const canSubmit = useMemo(() => {
     if (isSubmitting) return false;
-    return step === "credentials"
-      ? email.trim().length > 0 && password.length > 0 && phoneNumber.trim().length >= 10
-      : otp.trim().length === 6;
-  }, [step, email, password, phoneNumber, otp, isSubmitting]);
 
-  function startResendCooldown() {
-    if (cooldownTimer.current) {
-      clearInterval(cooldownTimer.current);
-    }
-    setResendCooldown(30);
-    cooldownTimer.current = setInterval(() => {
-      setResendCooldown((previous) => {
-        if (previous <= 1 && cooldownTimer.current) {
-          clearInterval(cooldownTimer.current);
-          cooldownTimer.current = null;
-          return 0;
-        }
-        return previous - 1;
-      });
-    }, 1000);
-  }
+    return email.trim().length > 0 && password.length > 0;
+  }, [email, password, isSubmitting]);
 
-  async function handleSendCode() {
+  // ---------------------------------------------------------------------------
+  // Authentication
+  // ---------------------------------------------------------------------------
+
+  async function handleSubmit() {
     setMessage(null);
 
     const parsed = credentialsSchema.safeParse({
       email: email.trim(),
       password,
-      phoneNumber: normalizePhoneNumber(phoneNumber),
     });
 
     if (!parsed.success) {
-      setMessage(parsed.error.issues[0]?.message ?? "Please check your login details.");
+      setMessage(
+        parsed.error.issues[0]?.message ?? "Please check your login details.",
+      );
       return;
     }
 
     if (!hasApiBaseUrl()) {
-      setMessage("Missing API URL. Add EXPO_PUBLIC_API_URL to .env and restart Expo.");
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      const response = await sendLoginOtp(parsed.data);
-      setMaskedPhone(response.phoneNumber);
-      setOtp("");
-      setStep("otp");
-      startResendCooldown();
-    } catch (error) {
       setMessage(
-        error instanceof ApiError
-          ? error.message
-          : "Please check your credentials and try again.",
+        "Missing API URL. Add EXPO_PUBLIC_API_URL to .env and restart Expo.",
       );
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  async function handleVerifyCode() {
-    setMessage(null);
-
-    const credentials = credentialsSchema.safeParse({
-      email: email.trim(),
-      password,
-      phoneNumber: normalizePhoneNumber(phoneNumber),
-    });
-    const code = otpSchema.safeParse({ otp: otp.trim() });
-
-    if (!credentials.success) {
-      setMessage(credentials.error.issues[0]?.message ?? "Please check your login details.");
-      return;
-    }
-
-    if (!code.success) {
-      setMessage(code.error.issues[0]?.message ?? "Enter the 6-digit verification code.");
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      const user = await verifyLoginOtp({
-        ...credentials.data,
-        otp: code.data.otp,
-      });
+      const user = await login(parsed.data);
+
       const destination = ROLE_HOME_ROUTE[user.role] ?? "/(app)";
+
       try {
         router.replace(destination as never);
       } catch {
@@ -174,98 +128,130 @@ export default function LoginScreen() {
     }
   }
 
-  async function handleResendCode() {
-    if (resendCooldown > 0 || isResending) return;
-
-    setMessage(null);
-    setIsResending(true);
-
-    try {
-      const response = await resendLoginOtp({
-        email: email.trim(),
-        password,
-        phoneNumber: normalizePhoneNumber(phoneNumber),
-      });
-      setMaskedPhone(response.phoneNumber);
-      setOtp("");
-      startResendCooldown();
-    } catch (error) {
-      setMessage(
-        error instanceof ApiError
-          ? error.message
-          : "Could not resend the verification code.",
-      );
-    } finally {
-      setIsResending(false);
-    }
-  }
-
-  function handleBackToCredentials() {
-    setStep("credentials");
-    setMessage(null);
-    setOtp("");
-  }
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.select({ ios: "padding", android: undefined })}
+      behavior={Platform.select({
+        ios: "padding",
+        android: undefined,
+      })}
       style={styles.container}
     >
+      {/* Decorative background */}
+      <View style={styles.backgroundShapeOne} />
+      <View style={styles.backgroundShapeTwo} />
+      <View style={styles.backgroundDotOne} />
+      <View style={styles.backgroundDotTwo} />
+
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
+        {/* ----------------------------------------------------------------- */}
+        {/* Brand Header */}
+        {/* ----------------------------------------------------------------- */}
+
         <View style={styles.header}>
           <View style={styles.brandRow}>
-            <View style={styles.brandMark}>
-              <Text style={styles.brandMarkText}>C</Text>
+            <View style={styles.logoOuter}>
+              <View style={styles.logoInner}>
+                <Text style={styles.logoText}>C</Text>
+              </View>
             </View>
-            <Text style={styles.caption}>Careerly</Text>
+
+            <View>
+              <Text style={styles.brandName}>Careerly</Text>
+              <Text style={styles.brandTagline}>YOUR GO TO JOB PLATFORM</Text>
+            </View>
           </View>
 
-          <Text style={styles.title}>Sign in</Text>
+          <View style={styles.welcomeRow}>
+            <View style={styles.wavingHand}>
+              <SymbolView
+                name={{
+                  ios: "hand.wave.fill",
+                  android: "waving_hand",
+                  web: "waving_hand",
+                }}
+                size={25}
+                tintColor="#F59E0B"
+                style={{ transform: [{ scaleX: -1 }] }}
+              />
+            </View>
 
-          <Text style={styles.subtitle}>
-            Access jobs, applications, and recruiter messages from the Careerly
-            mobile app.
-          </Text>
+            <View style={styles.welcomeTextContainer}>
+              <Text style={styles.title}>Welcome back</Text>
+
+              <Text style={styles.subtitle}>
+                Sign in and pick up right where you left off.
+              </Text>
+            </View>
+          </View>
         </View>
 
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View>
-              <Text style={styles.cardTitle}>
-                {step === "credentials" ? "Welcome back" : "Verification code"}
-              </Text>
-              <Text style={styles.cardSubtitle}>
-                {step === "credentials"
-                  ? "Use your Careerly credentials"
-                  : maskedPhone
-                    ? `Code sent to ${maskedPhone}`
-                    : "Enter the 6-digit code"}
-              </Text>
-            </View>
-            <View style={styles.statusPill}>
-              <SymbolView
-                name={{ ios: "lock.shield", android: "lock", web: "lock" }}
-                size={14}
-                tintColor={APP_COLORS.primary}
-              />
-              <Text style={styles.statusText}>Secure</Text>
-            </View>
-          </View>
+        {/* ----------------------------------------------------------------- */}
+        {/* Main Card */}
+        {/* ----------------------------------------------------------------- */}
 
-          {step === "credentials" ? (
-            <View style={styles.form}>
-              <View>
-                <Text style={styles.label}>Email</Text>
-                <View style={styles.inputRow}>
+        <View style={styles.cardShadow}>
+          <View style={styles.card}>
+            {/* Top accent */}
+            <View style={styles.cardAccent}>
+              <View style={styles.accentBlue} />
+              <View style={styles.accentPurple} />
+              <View style={styles.accentGreen} />
+            </View>
+
+            {/* Card Header */}
+            <View style={styles.cardHeader}>
+              <View style={styles.cardHeaderLeft}>
+                <View style={styles.stepIcon}>
                   <SymbolView
-                    name={{ ios: "envelope", android: "email", web: "email" }}
-                    size={18}
-                    tintColor={APP_COLORS.subtleText}
-                    style={styles.inputIcon}
+                    name={{
+                      ios: "person.fill",
+                      android: "person",
+                      web: "person",
+                    }}
+                    size={19}
+                    tintColor={APP_COLORS.primary}
                   />
+                </View>
+
+                <View>
+                  <Text style={styles.cardTitle}>Sign in to your account</Text>
+
+                  <Text style={styles.cardSubtitle}>
+                    Enter your email and password below
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.secureBadge}>
+                <View style={styles.secureDot} />
+
+                <Text style={styles.secureText}>SECURE</Text>
+              </View>
+            </View>
+
+            {/* ------------------------------------------------------------- */}
+            {/* Credentials */}
+            {/* ------------------------------------------------------------- */}
+
+            <View style={styles.form}>
+              {/* Email */}
+              <View>
+                <Text style={styles.label}>Email address</Text>
+
+                <View style={styles.inputRow}>
+                  <FieldIcon
+                    icon={{ ios: "envelope", android: "email", web: "email" }}
+                    color="#4F7DF3"
+                  />
+
                   <TextInput
                     value={email}
                     onChangeText={setEmail}
@@ -273,366 +259,591 @@ export default function LoginScreen() {
                     autoCorrect={false}
                     keyboardType="email-address"
                     placeholder="you@example.com"
-                    placeholderTextColor={APP_COLORS.subtleText}
+                    placeholderTextColor="#A1A8B5"
                     style={styles.input}
                   />
                 </View>
               </View>
 
+              {/* Password */}
               <View>
                 <Text style={styles.label}>Password</Text>
+
                 <View style={styles.inputRow}>
-                  <SymbolView
-                    name={{ ios: "lock", android: "lock", web: "lock" }}
-                    size={18}
-                    tintColor={APP_COLORS.subtleText}
-                    style={styles.inputIcon}
+                  <FieldIcon
+                    icon={{ ios: "lock", android: "lock", web: "lock" }}
+                    color="#8B5CF6"
                   />
+
                   <TextInput
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry={!isPasswordVisible}
-                    placeholder="Password"
-                    placeholderTextColor={APP_COLORS.subtleText}
+                    placeholder="Your password"
+                    placeholderTextColor="#A1A8B5"
                     style={styles.input}
                   />
+
                   <Pressable
                     onPress={() => setIsPasswordVisible((visible) => !visible)}
                     accessibilityRole="button"
-                    accessibilityLabel={isPasswordVisible ? "Hide password" : "Show password"}
+                    accessibilityLabel={
+                      isPasswordVisible ? "Hide password" : "Show password"
+                    }
                     hitSlop={8}
-                    style={styles.inputAction}
+                    style={styles.eyeButton}
                   >
                     <SymbolView
                       name={
                         isPasswordVisible
-                          ? { ios: "eye.slash", android: "visibility_off", web: "visibility_off" }
-                          : { ios: "eye", android: "visibility", web: "visibility" }
+                          ? {
+                              ios: "eye.slash",
+                              android: "visibility_off",
+                              web: "visibility_off",
+                            }
+                          : {
+                              ios: "eye",
+                              android: "visibility",
+                              web: "visibility",
+                            }
                       }
-                      size={20}
-                      tintColor={APP_COLORS.mutedText}
+                      size={19}
+                      tintColor="#7D8491"
                     />
                   </Pressable>
                 </View>
               </View>
 
-              <View>
-                <Text style={styles.label}>Mobile number</Text>
-                <View style={styles.inputRow}>
-                  <SymbolView
-                    name={{ ios: "phone", android: "phone", web: "phone" }}
-                    size={18}
-                    tintColor={APP_COLORS.subtleText}
-                    style={styles.inputIcon}
-                  />
-                  <TextInput
-                    value={phoneNumber}
-                    onChangeText={setPhoneNumber}
-                    keyboardType="phone-pad"
-                    placeholder="10-digit mobile number"
-                    placeholderTextColor={APP_COLORS.subtleText}
-                    style={styles.input}
-                  />
-                </View>
-                <Text style={styles.hint}>
-                  A 6-digit verification code is sent to the mobile number linked
-                  to your account.
-                </Text>
-              </View>
-
+              {/* Error */}
               {message && (
                 <View style={styles.errorBox}>
+                  <View style={styles.errorIcon}>
+                    <Text style={styles.errorIconText}>!</Text>
+                  </View>
+
                   <Text style={styles.errorText}>{message}</Text>
                 </View>
               )}
 
+              {/* Button */}
               <Pressable
                 disabled={!canSubmit}
-                onPress={handleSendCode}
+                onPress={handleSubmit}
                 style={[
                   styles.button,
                   canSubmit ? styles.buttonEnabled : styles.buttonDisabled,
                 ]}
               >
                 {isSubmitting ? (
-                  <ActivityIndicator color={APP_COLORS.onPrimary} />
+                  <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.buttonText}>Send verification code</Text>
+                  <>
+                    <Text style={styles.buttonText}>Sign in</Text>
+
+                    <View style={styles.buttonArrow}>
+                      <Text style={styles.arrowText}>→</Text>
+                    </View>
+                  </>
                 )}
               </Pressable>
-            </View>
-          ) : (
-            <View style={styles.form}>
-              <View>
-                <Text style={styles.label}>Verification code</Text>
-                <TextInput
-                  value={otp}
-                  onChangeText={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))}
-                  keyboardType="number-pad"
-                  placeholder="000000"
-                  placeholderTextColor={APP_COLORS.subtleText}
-                  style={styles.otpInput}
-                  maxLength={6}
+
+              {/* Trust */}
+              <View style={styles.trustRow}>
+                <SymbolView
+                  name={{
+                    ios: "lock.fill",
+                    android: "lock",
+                    web: "lock",
+                  }}
+                  size={13}
+                  tintColor="#7A8290"
                 />
-                <Text style={styles.hint}>
-                  Enter the 6-digit code sent to your mobile number.
+
+                <Text style={styles.trustText}>
+                  Your information is encrypted and secure
                 </Text>
               </View>
-
-              {message && (
-                <View style={styles.errorBox}>
-                  <Text style={styles.errorText}>{message}</Text>
-                </View>
-              )}
-
-              <Pressable
-                disabled={!canSubmit}
-                onPress={handleVerifyCode}
-                style={[
-                  styles.button,
-                  canSubmit ? styles.buttonEnabled : styles.buttonDisabled,
-                ]}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator color={APP_COLORS.onPrimary} />
-                ) : (
-                  <Text style={styles.buttonText}>Verify & sign in</Text>
-                )}
-              </Pressable>
-
-              <View style={styles.secondaryRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={handleResendCode}
-                  disabled={resendCooldown > 0 || isResending}
-                  hitSlop={8}
-                >
-                  {isResending ? (
-                    <ActivityIndicator color={APP_COLORS.primary} size="small" />
-                  ) : (
-                    <Text
-                      style={[
-                        styles.linkText,
-                        resendCooldown > 0 && styles.linkTextDisabled,
-                      ]}
-                    >
-                      {resendCooldown > 0
-                        ? `Resend code in ${resendCooldown}s`
-                        : "Resend code"}
-                    </Text>
-                  )}
-                </Pressable>
-
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={handleBackToCredentials}
-                  hitSlop={8}
-                >
-                  <Text style={styles.linkText}>Back to login details</Text>
-                </Pressable>
-              </View>
             </View>
-          )}
+          </View>
         </View>
 
-        <Text style={styles.footerNote}>
-          Don&apos;t have an account? Register from the Careerly web portal.
-        </Text>
+        {/* ----------------------------------------------------------------- */}
+        {/* Footer */}
+        {/* ----------------------------------------------------------------- */}
+
+        <View style={styles.footer}>
+          <View style={styles.footerLine} />
+
+          <Text style={styles.footerText}>Don&apos;t have an account?</Text>
+
+          <Text style={styles.footerLink}>Register from our web portal</Text>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
+// -----------------------------------------------------------------------------
+// Styles
+// -----------------------------------------------------------------------------
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: APP_COLORS.canvas,
+    backgroundColor: "#F5F7FC",
+    paddingVertical: 25,
   },
+
   content: {
+    flexGrow: 1,
     justifyContent: "center",
-    minHeight: "100%",
     paddingHorizontal: 20,
-    paddingVertical: 40,
+    paddingVertical: 36,
   },
+
+  // ---------------------------------------------------------------------------
+  // Decorative Background
+  // ---------------------------------------------------------------------------
+
+  backgroundShapeOne: {
+    position: "absolute",
+    width: 230,
+    height: 230,
+    borderRadius: 115,
+    backgroundColor: "#E7EEFF",
+    top: -100,
+    right: -90,
+  },
+
+  backgroundShapeTwo: {
+    position: "absolute",
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: "#F0E9FF",
+    bottom: -70,
+    left: -80,
+  },
+
+  backgroundDotOne: {
+    position: "absolute",
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#B9D2FF",
+    top: 150,
+    left: 25,
+  },
+
+  backgroundDotTwo: {
+    position: "absolute",
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#C9B6FF",
+    bottom: 180,
+    right: 30,
+  },
+
+  // ---------------------------------------------------------------------------
+  // Header
+  // ---------------------------------------------------------------------------
+
   header: {
     marginBottom: 24,
   },
+
   brandRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
   },
-  brandMark: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: APP_COLORS.primary,
+
+  logoOuter: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#E5EDFF",
+    transform: [{ rotate: "-5deg" }],
   },
-  brandMarkText: {
-    color: APP_COLORS.onPrimary,
-    fontSize: 15,
+
+  logoInner: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: APP_COLORS.primary,
+    transform: [{ rotate: "5deg" }],
+  },
+
+  logoText: {
+    color: "#FFFFFF",
+    fontSize: 20,
     fontWeight: "900",
   },
-  caption: {
-    fontSize: 13,
+
+  brandName: {
+    marginLeft: 12,
+    color: "#1D2433",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+
+  brandTagline: {
+    marginLeft: 12,
+    marginTop: 2,
+    color: "#8992A2",
+    fontSize: 8,
     fontWeight: "800",
-    color: APP_COLORS.primary,
-    textTransform: "uppercase",
-    letterSpacing: 1,
+    letterSpacing: 1.2,
   },
+
+  welcomeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 26,
+  },
+
+  wavingHand: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF3D9",
+  },
+
+  wavingText: {
+    fontSize: 25,
+  },
+
+  welcomeTextContainer: {
+    flex: 1,
+    marginLeft: 13,
+  },
+
   title: {
-    marginTop: 12,
-    fontSize: 34,
+    color: "#1B2230",
+    fontSize: 31,
     fontWeight: "900",
-    color: APP_COLORS.text,
-    lineHeight: 40,
+    letterSpacing: -0.8,
   },
+
   subtitle: {
-    marginTop: 8,
-    fontSize: 15,
-    lineHeight: 22,
-    color: APP_COLORS.mutedText,
+    marginTop: 4,
+    color: "#788292",
+    fontSize: 14,
+    lineHeight: 20,
   },
+
+  // ---------------------------------------------------------------------------
+  // Card
+  // ---------------------------------------------------------------------------
+
+  cardShadow: {
+    borderRadius: 24,
+    shadowColor: "#263B70",
+    shadowOffset: {
+      width: 0,
+      height: 12,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 24,
+    elevation: 7,
+  },
+
   card: {
-    backgroundColor: APP_COLORS.surface,
-    borderRadius: 20,
+    overflow: "hidden",
     borderWidth: 1,
-    borderColor: APP_COLORS.border,
+    borderColor: "#E7EAF0",
+    borderRadius: 24,
+    backgroundColor: "#FFFFFF",
     padding: 20,
   },
+
+  cardAccent: {
+    flexDirection: "row",
+    position: "absolute",
+    top: 0,
+    left: 20,
+    right: 20,
+    height: 4,
+    borderBottomLeftRadius: 5,
+    borderBottomRightRadius: 5,
+    overflow: "hidden",
+  },
+
+  accentBlue: {
+    flex: 1,
+    backgroundColor: "#4F7DF3",
+  },
+
+  accentPurple: {
+    flex: 0.7,
+    backgroundColor: "#8B5CF6",
+  },
+
+  accentGreen: {
+    flex: 0.45,
+    backgroundColor: "#10B981",
+  },
+
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
+    marginTop: 6,
   },
-  cardTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: APP_COLORS.text,
-  },
-  cardSubtitle: {
-    marginTop: 4,
-    fontSize: 14,
-    color: APP_COLORS.mutedText,
-  },
-  statusPill: {
+
+  cardHeaderLeft: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    borderWidth: 1,
-    borderColor: APP_COLORS.border,
-    borderRadius: 999,
-    backgroundColor: APP_COLORS.primarySoft,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
   },
-  statusText: {
-    fontSize: 11,
+
+  stepIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EEF3FF",
+  },
+
+  cardTitle: {
+    marginLeft: 11,
+    color: "#222938",
+    fontSize: 17,
     fontWeight: "800",
-    color: APP_COLORS.primary,
   },
+
+  cardSubtitle: {
+    marginLeft: 11,
+    marginTop: 2,
+    color: "#8A92A0",
+    fontSize: 12,
+  },
+
+  secureBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#ECFDF5",
+  },
+
+  secureDot: {
+    width: 6,
+    height: 6,
+    marginRight: 5,
+    borderRadius: 3,
+    backgroundColor: "#10B981",
+  },
+
+  secureText: {
+    color: "#059669",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+  },
+
+  // ---------------------------------------------------------------------------
+  // Form
+  // ---------------------------------------------------------------------------
+
   form: {
-    marginTop: 24,
-    gap: 16,
+    gap: 10,
+    marginTop: 25,
   },
+
   label: {
     marginBottom: 8,
-    fontSize: 14,
-    fontWeight: "600",
-    color: APP_COLORS.text,
+    color: "#353C4A",
+    fontSize: 13,
+    fontWeight: "800",
   },
+
   inputRow: {
+    minHeight: 54,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: APP_COLORS.surfaceElevated,
+    paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: APP_COLORS.divider,
-    borderRadius: 12,
-    paddingHorizontal: 14,
+    borderColor: "#E3E7EE",
+    borderRadius: 14,
+    backgroundColor: "#FAFBFD",
   },
-  inputIcon: {
-    marginRight: 10,
+
+  fieldIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
   },
+
   input: {
     flex: 1,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: APP_COLORS.text,
+    paddingHorizontal: 11,
+    paddingVertical: 13,
+    color: "#252B38",
+    fontSize: 15,
   },
-  inputAction: {
-    paddingLeft: 10,
-    paddingVertical: 10,
+
+  eyeButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 9,
   },
-  hint: {
+
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
     marginTop: 8,
-    fontSize: 13,
-    lineHeight: 18,
-    color: APP_COLORS.mutedText,
   },
-  otpInput: {
-    backgroundColor: APP_COLORS.surfaceElevated,
-    borderWidth: 1,
-    borderColor: APP_COLORS.divider,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 24,
-    fontWeight: "700",
-    letterSpacing: 12,
-    textAlign: "center",
-    color: APP_COLORS.text,
+
+  hint: {
+    flex: 1,
+    marginLeft: 6,
+    color: "#818997",
+    fontSize: 11.5,
+    lineHeight: 17,
   },
+
+  // ---------------------------------------------------------------------------
+  // Error
+  // ---------------------------------------------------------------------------
+
   errorBox: {
-    backgroundColor: APP_COLORS.dangerSoft,
-    borderWidth: 1,
-    borderColor: "#FECACA",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  errorText: {
-    color: APP_COLORS.danger,
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  button: {
-    height: 54,
-    justifyContent: "center",
+    flexDirection: "row",
     alignItems: "center",
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderWidth: 1,
+    borderColor: "#F8D1D1",
+    borderRadius: 13,
+    backgroundColor: "#FFF5F5",
   },
+
+  errorIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EF4444",
+  },
+
+  errorIconText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  errorText: {
+    flex: 1,
+    marginLeft: 9,
+    color: "#C63D3D",
+    fontSize: 12.5,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
+
+  // ---------------------------------------------------------------------------
+  // Button
+  // ---------------------------------------------------------------------------
+
+  button: {
+    height: 55,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 15,
+  },
+
   buttonEnabled: {
     backgroundColor: APP_COLORS.primary,
+    shadowColor: APP_COLORS.primary,
+    shadowOffset: {
+      width: 0,
+      height: 7,
+    },
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    elevation: 5,
   },
+
   buttonDisabled: {
-    backgroundColor: "#89B5EC",
+    backgroundColor: "#AFC4E8",
   },
+
   buttonText: {
-    color: APP_COLORS.onPrimary,
-    fontSize: 16,
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "800",
   },
-  secondaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+
+  buttonArrow: {
+    width: 27,
+    height: 27,
     alignItems: "center",
-    gap: 12,
+    justifyContent: "center",
+    marginLeft: 9,
+    borderRadius: 9,
+    backgroundColor: "rgba(255,255,255,0.18)",
   },
-  linkText: {
+
+  arrowText: {
+    color: "#FFFFFF",
+    fontSize: 17,
+    fontWeight: "800",
+  },
+
+  // ---------------------------------------------------------------------------
+  // Trust
+  // ---------------------------------------------------------------------------
+
+  trustRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: -3,
+  },
+
+  trustText: {
+    marginLeft: 5,
+    color: "#8B929E",
+    fontSize: 10.5,
+  },
+
+  // ---------------------------------------------------------------------------
+  // Footer
+  // ---------------------------------------------------------------------------
+
+  footer: {
+    alignItems: "center",
+    marginTop: 22,
+  },
+
+  footerLine: {
+    width: 36,
+    height: 3,
+    marginBottom: 10,
+    borderRadius: 2,
+    backgroundColor: "#DCE3F2",
+  },
+
+  footerText: {
+    color: "#8A929F",
+    fontSize: 11.5,
+  },
+
+  footerLink: {
+    marginTop: 3,
     color: APP_COLORS.primary,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  linkTextDisabled: {
-    color: APP_COLORS.subtleText,
-  },
-  footerNote: {
-    marginTop: 20,
-    textAlign: "center",
-    fontSize: 13,
-    color: APP_COLORS.mutedText,
+    fontSize: 11.5,
+    fontWeight: "800",
   },
 });

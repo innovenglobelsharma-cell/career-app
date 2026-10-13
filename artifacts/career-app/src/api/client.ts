@@ -16,7 +16,9 @@ function buildUrl(path: string) {
 
   const origin = API_BASE_URL.replace(/\/api\/?$/, "");
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const apiPath = normalizedPath.startsWith("/api/") ? normalizedPath : `/api${normalizedPath}`;
+  const apiPath = normalizedPath.startsWith("/api/")
+    ? normalizedPath
+    : `/api${normalizedPath}`;
 
   return `${origin}${apiPath}`;
 }
@@ -40,7 +42,10 @@ async function parseResponse(response: Response) {
  * cookie store, and `credentials: "include"` keeps cross-origin web
  * requests authenticated.
  */
-export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+export async function apiRequest<T>(
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<T> {
   const headers = new Headers(options.headers);
 
   if (!headers.has("Content-Type") && options.body) {
@@ -70,8 +75,8 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
       typeof data === "object" && data && "error" in data
         ? String(data.error)
         : typeof data === "object" && data && "message" in data
-        ? String(data.message)
-        : `Request failed with status ${response.status}`;
+          ? String(data.message)
+          : `Request failed with status ${response.status}`;
 
     throw new ApiError(message, response.status);
   }

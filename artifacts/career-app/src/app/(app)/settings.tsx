@@ -6,7 +6,11 @@ import { APP_COLORS, AppIconName, MaxContentWidth } from "@/constants/theme";
 import { APP_MODULES } from "@/constants/navigation";
 import { PlaceholderScreen } from "@/components/placeholder-screen";
 
-const SETTINGS_ICON: AppIconName = { ios: "gearshape", android: "settings", web: "settings" };
+const SETTINGS_ICON: AppIconName = {
+  ios: "gearshape",
+  android: "settings",
+  web: "settings",
+};
 
 export default function SettingsScreen() {
   const { currentUser } = useAuth();
@@ -47,7 +51,8 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitle}>Account</Text>
 
         <Text style={styles.accountText}>
-          Signed in as {currentUser?.email ?? "unknown"} ({currentUser?.role ?? "no role"})
+          Signed in as {currentUser?.email ?? "unknown"} (
+          {currentUser?.role ?? "no role"})
         </Text>
 
         <Text style={styles.sectionTitle}>Workspace sections</Text>
